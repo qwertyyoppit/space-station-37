@@ -417,7 +417,7 @@ namespace Content.Server.Disposal.Tube
             _popups.PopupEntity(Loc.GetString("disposal-tube-component-popup-directions-text", ("directions", directions)), tubeId, recipient);
         }
 
-        public override bool TryInsert(EntityUid uid, DisposalUnitComponent from, IEnumerable<string>? tags = default, DisposalEntryComponent? entry = null)
+        public override bool TryInsert(EntityUid uid, DisposalContainerComponent from, IEnumerable<string>? tags = default, DisposalEntryComponent? entry = null)
         {
             if (!Resolve(uid, ref entry))
                 return false;

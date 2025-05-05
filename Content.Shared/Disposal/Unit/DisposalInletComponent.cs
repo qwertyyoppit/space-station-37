@@ -1,7 +1,5 @@
-using Content.Shared.Atmos;
 using Robust.Shared.Audio;
 using Content.Shared.Whitelist;
-using Robust.Shared.Containers;
 using Robust.Shared.GameStates;
 using Robust.Shared.Serialization;
 using Robust.Shared.Serialization.TypeSerializers.Implementations.Custom;
@@ -14,13 +12,7 @@ namespace Content.Shared.Disposal.Components;
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState(true)]
 public sealed partial class DisposalInletComponent : Component
 {
-    public const string ContainerId = "disposals";
-
-    /// <summary>
-    /// Air contained in the disposal inlet.
-    /// </summary>
-    [DataField]
-    public GasMixture Air = new(Atmospherics.CellVolume);
+    [ViewVariables] public DisposalContainerComponent ContainerComponent = default!;
 
     /// <summary>
     /// Sounds played upon the inlet flushing.
@@ -53,19 +45,16 @@ public sealed partial class DisposalInletComponent : Component
     public DisposalsInletState State;
 
     /// <summary>
-    /// How long it takes from the start of a flush animation to return the sprite to normal.
-    /// </summary>
-    [DataField]
-    public TimeSpan FlushDelay = TimeSpan.FromSeconds(1.5);
-
-    /// <summary>
     /// Removes delay of flushing.
     /// </summary>
     [DataField]
     public bool DisableFlushDelay;
 
+    /// <summary>
+    /// How long it takes for items to be flushed after it is queued.
+    /// </summary>
     [DataField, AutoNetworkedField]
-    public TimeSpan AutomaticEngageTime = TimeSpan.FromSeconds(1);
+    public TimeSpan FlushDelay = TimeSpan.FromSeconds(1.5);
 
     /// <summary>
     /// Delay from trying to enter disposals ourselves.
@@ -73,13 +62,11 @@ public sealed partial class DisposalInletComponent : Component
     [DataField]
     public float EntryDelay = 0.5f;
 
-    [ViewVariables] public Container Container = default!;
-
     /// <summary>
     /// Next time this inlet will flush.
     /// </summary>
     [DataField(customTypeSerializer: typeof(TimeOffsetSerializer)), AutoNetworkedField]
-    public TimeSpan NextFlush = TimeSpan.Zero;
+    public TimeSpan? NextFlush;
 
     [Serializable, NetSerializable]
     public enum Visuals : byte

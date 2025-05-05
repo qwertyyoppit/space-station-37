@@ -1,7 +1,5 @@
-using Content.Shared.Atmos;
 using Robust.Shared.Audio;
 using Content.Shared.Whitelist;
-using Robust.Shared.Containers;
 using Robust.Shared.GameStates;
 using Robust.Shared.Serialization;
 using Robust.Shared.Serialization.TypeSerializers.Implementations.Custom;
@@ -14,14 +12,6 @@ namespace Content.Shared.Disposal.Components;
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState(true)]
 public sealed partial class DisposalUnitComponent : Component
 {
-    public const string ContainerId = "disposals";
-
-    /// <summary>
-    /// Air contained in the disposal unit.
-    /// </summary>
-    [DataField]
-    public GasMixture Air = new(Atmospherics.CellVolume);
-
     /// <summary>
     /// Sounds played upon the unit flushing.
     /// </summary>
@@ -100,10 +90,7 @@ public sealed partial class DisposalUnitComponent : Component
     [ViewVariables(VVAccess.ReadWrite)]
     public float DraggedEntryDelay = 2.0f;
 
-    /// <summary>
-    /// Container of entities inside this disposal unit.
-    /// </summary>
-    [ViewVariables] public Container Container = default!;
+    [ViewVariables] public DisposalContainerComponent ContainerComponent = default!;
 
     /// <summary>
     /// Was the disposals unit engaged for a manual flush.
