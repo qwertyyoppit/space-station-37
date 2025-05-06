@@ -33,6 +33,12 @@ public sealed partial class DisposalInletComponent : Component
     public EntityWhitelist? Whitelist;
 
     /// <summary>
+    /// Maintained hashset of entities currently passing through the turnstile.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public HashSet<EntityUid> CollideExceptions = new();
+
+    /// <summary>
     /// Sound played when an object falls into the disposal inlet.
     /// </summary>
     [ViewVariables(VVAccess.ReadWrite), DataField("soundInsert")]

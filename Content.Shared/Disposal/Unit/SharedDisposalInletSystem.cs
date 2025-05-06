@@ -16,6 +16,7 @@ using Content.Shared.IdentityManagement;
 using Content.Shared.Interaction;
 using Content.Shared.Item;
 using Content.Shared.Movement.Events;
+using Content.Shared.Movement.Pulling.Systems;
 using Content.Shared.Popups;
 using Content.Shared.Power;
 using Content.Shared.Power.EntitySystems;
@@ -53,6 +54,7 @@ public abstract class SharedDisposalInletSystem : EntitySystem
     [Dependency] private readonly SharedPopupSystem _popupSystem = default!;
     [Dependency] private readonly SharedDoAfterSystem _doAfterSystem = default!;
     [Dependency] private readonly SharedHandsSystem _handsSystem = default!;
+    [Dependency] private readonly PullingSystem _pulling = default!;
     [Dependency] protected readonly SharedTransformSystem TransformSystem = default!;
     [Dependency] private readonly SharedUserInterfaceSystem _ui = default!;
     [Dependency] private readonly SharedMapSystem _map = default!;
@@ -62,7 +64,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         base.Initialize();
 
         SubscribeLocalEvent<DisposalInletComponent, PreventCollideEvent>(OnPreventCollide);
-        SubscribeLocalEvent<DisposalInletComponent, StartCollideEvent>(OnStartCollide);
+        // SubscribeLocalEvent<DisposalInletComponent, StartCollideEvent>(OnStartCollide);
+        // SubscribeLocalEvent<DisposalInletComponent, EndCollideEvent>(OnEndCollide);
         SubscribeLocalEvent<DisposalInletComponent, CanDropTargetEvent>(OnCanDragDropOn);
         SubscribeLocalEvent<DisposalInletComponent, GetVerbsEvent<InteractionVerb>>(AddInsertVerb);
 
@@ -159,7 +162,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
     protected virtual void OnDisposalInit(EntityUid uid, DisposalInletComponent comp, ref ComponentInit args)
     {
         comp.ContainerComponent = EnsureComp<DisposalContainerComponent>(uid);
-        comp.ContainerComponent.Container = Containers.EnsureContainer<Container>(uid, DisposalContainerComponent.ContainerId);
+        comp.ContainerComponent.Container =
+            Containers.EnsureContainer<Container>(uid, DisposalContainerComponent.ContainerId);
     }
 
     private void OnPowerChange(EntityUid uid, DisposalInletComponent comp, ref PowerChangedEvent args)
@@ -218,10 +222,16 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         switch (state)
         {
             case DisposalsInletState.Flushed:
-                _appearance.SetData(uid, DisposalInletComponent.Visuals.VisualState, DisposalInletComponent.VisualState.OverlayFlushing, appearance);
+                _appearance.SetData(uid,
+                    DisposalInletComponent.Visuals.VisualState,
+                    DisposalInletComponent.VisualState.OverlayFlushing,
+                    appearance);
                 break;
             case DisposalsInletState.Ready:
-                _appearance.SetData(uid, DisposalInletComponent.Visuals.VisualState, DisposalInletComponent.VisualState.Anchored, appearance);
+                _appearance.SetData(uid,
+                    DisposalInletComponent.Visuals.VisualState,
+                    DisposalInletComponent.VisualState.Anchored,
+                    appearance);
                 break;
         }
     }
@@ -245,14 +255,22 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         return DisposalsInletState.Ready;
     }
 
-    protected void OnPreventCollide(EntityUid uid, DisposalInletComponent comp,
+    protected void OnPreventCollide(EntityUid uid,
+        DisposalInletComponent comp,
         ref PreventCollideEvent args)
     {
-        if (!CanEnterDirection((uid, comp), args.OtherEntity))
-            return;
-
         if (!CanInsert(uid, comp, args.OtherEntity))
             return;
+
+        if (CanEnterDirection((uid, comp), args.OtherEntity))
+        {
+            if (!TryInsert(uid, args.OtherEntity, default!))
+            {
+                return;
+            }
+
+            comp.CollideExceptions.Add(args.OtherEntity);
+        }
 
         args.Cancelled = true;
         Dirty(uid, comp);
@@ -261,7 +279,25 @@ public abstract class SharedDisposalInletSystem : EntitySystem
     private void OnStartCollide(Entity<DisposalInletComponent> ent,
         ref StartCollideEvent args)
     {
-        TryInsert(ent, args.OtherEntity, default!);
+        if (!ent.Comp.CollideExceptions.Contains(args.OtherEntity))
+        {
+            return;
+        }
+
+        if (!TryInsert(ent, args.OtherEntity, null, ent.Comp))
+        {
+            ent.Comp.CollideExceptions.Remove(args.OtherEntity);
+            Dirty(ent);
+        }
+    }
+
+    private void OnEndCollide(Entity<DisposalInletComponent> ent, ref EndCollideEvent args)
+    {
+        if (!args.OurFixture.Hard)
+        {
+            ent.Comp.CollideExceptions.Remove(args.OtherEntity);
+            Dirty(ent);
+        }
     }
 
     private bool CanEnterDirection(Entity<DisposalInletComponent> ent,
@@ -295,9 +331,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         args.Handled = true;
     }
 
-    private void OnEmagged(Entity<DisposalInletComponent> ent, ref GotEmaggedEvent args)
+    private void OnEmagged(EntityUid uid, DisposalInletComponent comp, ref GotEmaggedEvent args)
     {
-        var comp = ent.Comp;
         comp.DisableFlushDelay = true;
         args.Handled = true;
     }
@@ -342,7 +377,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         AfterInsert(uid, disposal, toInsert, user);
     }
 
-    public virtual void AfterInsert(EntityUid uid, DisposalInletComponent comp,
+    public virtual void AfterInsert(EntityUid uid,
+        DisposalInletComponent comp,
         EntityUid inserted,
         EntityUid? user = null,
         bool doInsert = false)
@@ -385,7 +421,7 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         if (!CanInsert(uid, comp, toInsertId))
             return false;
 
-        var delay = userId != null ? comp.EntryDelay : 0;
+        var delay = userId.HasValue ? comp.EntryDelay : 0;
 
         if (delay <= 0 || userId == null)
         {
@@ -410,7 +446,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
         return true;
     }
 
-    private void UpdateState(EntityUid uid, DisposalInletComponent comp,
+    private void UpdateState(EntityUid uid,
+        DisposalInletComponent comp,
         DisposalsInletState state,
         MetaDataComponent metadata)
     {
@@ -480,7 +517,6 @@ public abstract class SharedDisposalInletSystem : EntitySystem
 
     protected virtual void HandleAir(EntityUid uid, DisposalInletComponent comp, TransformComponent xform)
     {
-
     }
 
     /// <summary>
@@ -510,7 +546,8 @@ public abstract class SharedDisposalInletSystem : EntitySystem
 
         var pauseTime = Metadata.GetPauseTime(uid, metadata);
         var automaticTime = GameTiming.CurTime + comp.FlushDelay - pauseTime;
-        var flushTime = TimeSpan.FromSeconds(Math.Min((comp.NextFlush ?? TimeSpan.MaxValue).TotalSeconds, automaticTime.TotalSeconds));
+        var flushTime = TimeSpan.FromSeconds(Math.Min((comp.NextFlush ?? TimeSpan.MaxValue).TotalSeconds,
+            automaticTime.TotalSeconds));
 
         comp.NextFlush = comp.DisableFlushDelay ? flushTime : GameTiming.CurTime;
         Dirty(uid, comp);
