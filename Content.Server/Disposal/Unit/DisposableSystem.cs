@@ -130,7 +130,7 @@ namespace Content.Server.Disposal.Unit
                     continue;
 
                 if (duc != null)
-                    _containerSystem.Insert((entity, xform, meta), duc.Container);
+                    _containerSystem.Insert((entity, xform, meta), duc.ContainerComponent.Container);
                 else
                 {
                     _xformSystem.AttachToGridOrMap(entity, xform);

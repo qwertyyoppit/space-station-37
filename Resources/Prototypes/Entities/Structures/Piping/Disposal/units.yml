@@ -90,6 +90,7 @@
     graph: DisposalMachine
     node: disposal_unit
   - type: DisposalUnit
+  - type: DisposalContainer
   - type: ThrowInsertContainer
     containerId: disposals
   - type: UserInterface

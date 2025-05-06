@@ -1,11 +1,14 @@
 using Content.Shared.Atmos;
 using Robust.Shared.Containers;
+using Robust.Shared.GameStates;
 
 namespace Content.Shared.Disposal.Components;
 
 /// <summary>
 /// Container and air storage common among disposal units.
 /// </summary>
+
+[RegisterComponent, NetworkedComponent]
 public sealed partial class DisposalContainerComponent : Component
 {
     public const string ContainerId = "disposals";

@@ -77,7 +77,6 @@ public sealed partial class DisposalInletComponent : Component
     [Serializable, NetSerializable]
     public enum VisualState : byte
     {
-        UnAnchored,
         Anchored,
         OverlayFlushing
     }

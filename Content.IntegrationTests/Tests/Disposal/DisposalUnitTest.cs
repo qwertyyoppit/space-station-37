@@ -48,7 +48,7 @@ namespace Content.IntegrationTests.Tests.Disposal
         {
             foreach (var entity in entities)
             {
-                Assert.That(unit.Container.ContainedEntities.Contains(entity), Is.EqualTo(result));
+                Assert.That(unit.ContainerComponent.Container.ContainedEntities.Contains(entity), Is.EqualTo(result));
             }
         }
 
@@ -62,11 +62,11 @@ namespace Content.IntegrationTests.Tests.Disposal
         {
             Assert.Multiple(() =>
             {
-                Assert.That(unit.Container.ContainedEntities, Is.SupersetOf(entities));
-                Assert.That(entities, Has.Length.EqualTo(unit.Container.ContainedEntities.Count));
+                Assert.That(unit.ContainerComponent.Container.ContainedEntities, Is.SupersetOf(entities));
+                Assert.That(entities, Has.Length.EqualTo(unit.ContainerComponent.Container.ContainedEntities.Count));
 
                 Assert.That(result, Is.EqualTo(disposalSystem.TryFlush(unitEntity, unit)));
-                Assert.That(result || entities.Length == 0, Is.EqualTo(unit.Container.ContainedEntities.Count == 0));
+                Assert.That(result || entities.Length == 0, Is.EqualTo(unit.ContainerComponent.Container.ContainedEntities.Count == 0));
             });
         }
 

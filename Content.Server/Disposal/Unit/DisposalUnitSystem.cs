@@ -35,7 +35,7 @@ public sealed class DisposalUnitSystem : SharedDisposalUnitSystem
 
     private void OnDestruction(EntityUid uid, DisposalUnitComponent comp, DestructionEventArgs args)
     {
-        TryEjectContents(new Entity<DisposalUnitComponent>(uid, comp));
+        TryEjectContents(uid, comp);
     }
 
     private void OnExploded(Entity<DisposalUnitComponent> ent, ref BeforeExplodeEvent args)

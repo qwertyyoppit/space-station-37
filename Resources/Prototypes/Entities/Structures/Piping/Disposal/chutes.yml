@@ -1,0 +1,77 @@
+- type: entity
+  abstract: true
+  id: DisposalChuteBase
+  parent: BaseMachinePowered
+  description: A pneumatic waste disposal chute.
+  placement:
+    mode: SnapgridCenter
+    snap:
+    - Disposal
+  components:
+  - type: Sprite
+    sprite: Structures/Piping/disposal.rsi
+    snapCardinals: true
+    layers:
+    - state: disposal
+      map: [ "enum.DisposalInletVisualLayers.Base" ]
+    - state: disposal-flush
+      map: [ "enum.DisposalInletVisualLayers.OverlayFlush" ]
+  - type: Physics
+    bodyType: Static
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeAabb
+          bounds: "-0.45,-0.45,0.45,0.45"
+        density: 55
+        mask:
+        - TableMask
+        layer:
+        - TableLayer
+  - type: Destructible
+    thresholds:
+    - trigger:
+        !type:DamageTrigger
+        damage: 200
+      behaviors:
+      - !type:DoActsBehavior
+        acts: [ "Destruction" ]
+    - trigger:
+        !type:DamageTrigger
+        damage: 100
+      behaviors:
+      - !type:DoActsBehavior
+        acts: ["Destruction"]
+      - !type:PlaySoundBehavior
+        sound:
+          collection: MetalBreak
+          params:
+            volume: -6
+      - !type:SpawnEntitiesBehavior
+        spawn:
+          SheetSteel1:
+            min: 1
+            max: 1
+  - type: Appearance
+  - type: ContainerContainer
+    containers:
+      disposals: !type:Container
+  - type: DisposalContainer
+  - type: StaticPrice
+    price: 70
+
+- type: entity
+  id: DisposalInlet
+  parent: DisposalChuteBase
+  name: disposal inlet
+  description: A chute for big and small packages alike!
+  components:
+  - type: Construction
+    graph: DisposalMachine
+    node: disposal_inlet
+  - type: Sprite
+    sprite: Structures/Piping/disposal.rsi
+    snapCardinals: true
+  - type: DisposalInlet
+  - type: RequireProjectileTarget

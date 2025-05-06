@@ -92,14 +92,12 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         SubscribeLocalEvent<DisposalUnitComponent, ContainerRelayMovementEntityEvent>(OnMovement);
     }
 
-    private void AddDisposalAltVerbs(Entity<DisposalUnitComponent> ent, ref GetVerbsEvent<AlternativeVerb> args)
+    private void AddDisposalAltVerbs(EntityUid uid, DisposalUnitComponent comp, ref GetVerbsEvent<AlternativeVerb> args)
     {
         if (!args.CanAccess || !args.CanInteract)
             return;
 
-        var uid = ent.Owner;
-        var component = ent.Comp;
-        var containerComp = component.ContainerComponent;
+        var containerComp = comp.ContainerComponent;
 
         // Behavior for if the disposals bin has items in it
         if (containerComp.Container.ContainedEntities.Count > 0)
@@ -107,7 +105,7 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             // Verbs to flush the unit
             AlternativeVerb flushVerb = new()
             {
-                Act = () => ManualEngage(ent),
+                Act = () => ManualEngage(uid, comp),
                 Text = Loc.GetString("disposal-flush-verb-get-data-text"),
                 Icon = new SpriteSpecifier.Texture(new("/Textures/Interface/VerbIcons/delete_transparent.svg.192dpi.png")),
                 Priority = 1,
@@ -117,7 +115,7 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             // Verb to eject the contents
             AlternativeVerb ejectVerb = new()
             {
-                Act = () => TryEjectContents(ent),
+                Act = () => TryEjectContents(uid, comp),
                 Category = VerbCategory.Eject,
                 Text = Loc.GetString("disposal-eject-verb-get-data-text")
             };
@@ -133,10 +131,9 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         if (!ActionBlockerSystem.CanDrop(args.User))
             return;
 
-        var ent = new Entity<DisposalUnitComponent>(uid, comp);
-        var containerComp = ent.Comp.ContainerComponent;
+        var containerComp = comp.ContainerComponent;
 
-        if (!CanInsert(ent, args.Using.Value))
+        if (!CanInsert(uid, comp, args.Using.Value))
             return;
 
         InteractionVerb insertVerb = new()
@@ -146,8 +143,8 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             Act = () =>
             {
                 _handsSystem.TryDropIntoContainer(args.User, args.Using.Value, containerComp.Container, checkActionBlocker: false, args.Hands);
-                _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(args.User):player} inserted {ToPrettyString(args.Using.Value)} into {ToPrettyString(ent)}");
-                AfterInsert(ent, args.Using.Value, args.User);
+                _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(args.User):player} inserted {ToPrettyString(args.Using.Value)} into {ToPrettyString(uid)}");
+                AfterInsert(uid, comp, args.Using.Value, args.User);
             }
         };
 
@@ -159,16 +156,14 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         if (args.Handled || args.Cancelled || args.Args.Target == null || args.Args.Used == null)
             return;
 
-        var ent = new Entity<DisposalUnitComponent>(uid, comp);
-
-        AfterInsert(ent, args.Args.Target.Value, args.Args.User, doInsert: true);
+        AfterInsert(uid, comp, args.Args.Target.Value, args.Args.User, doInsert: true);
 
         args.Handled = true;
     }
 
-    private void OnThrowInsert(Entity<DisposalUnitComponent> ent, ref BeforeThrowInsertEvent args)
+    private void OnThrowInsert(EntityUid uid, DisposalUnitComponent comp, ref BeforeThrowInsertEvent args)
     {
-        if (!CanInsert(ent, args.ThrownEntity))
+        if (!CanInsert(uid, comp, args.ThrownEntity))
             args.Cancelled = true;
     }
 
@@ -179,29 +174,27 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         var query = EntityQueryEnumerator<DisposalUnitComponent, MetaDataComponent>();
         while (query.MoveNext(out var uid, out var comp, out var metadata))
         {
-            Update(new Entity<DisposalUnitComponent>(uid, comp), metadata);
+            Update(uid, comp, metadata);
         }
     }
 
     // TODO: This should just use the same thing as entity storage?
-    private void OnMovement(Entity<DisposalUnitComponent> ent, ref ContainerRelayMovementEntityEvent args)
+    private void OnMovement(EntityUid uid, DisposalUnitComponent comp, ref ContainerRelayMovementEntityEvent args)
     {
         var currentTime = GameTiming.CurTime;
 
         if (!ActionBlockerSystem.CanMove(args.Entity))
             return;
 
-        var comp = ent.Comp;
-
         if (!TryComp(args.Entity, out HandsComponent? hands) ||
             hands.Count == 0 ||
             currentTime < comp.LastExitAttempt + ExitAttemptDelay)
             return;
 
-        Dirty(ent);
+        Dirty(uid, comp);
         comp.LastExitAttempt = currentTime;
-        Remove(ent, args.Entity);
-        UpdateUI(ent);
+        Remove(uid, comp, args.Entity);
+        UpdateUI((uid, comp));
     }
 
     private void OnActivate(EntityUid uid, DisposalUnitComponent component, ActivateInWorldEvent args)
@@ -223,16 +216,15 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             return;
         }
 
-        var ent = new Entity<DisposalUnitComponent>(uid, comp);
-        var containerComp = ent.Comp.ContainerComponent;
+        var containerComp = comp.ContainerComponent;
 
-        if (!CanInsert(ent, args.Used) || !_handsSystem.TryDropIntoContainer(args.User, args.Used, containerComp.Container))
+        if (!CanInsert(uid, comp, args.Used) || !_handsSystem.TryDropIntoContainer(args.User, args.Used, containerComp.Container))
         {
             return;
         }
 
-        _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(args.User):player} inserted {ToPrettyString(args.Used)} into {ToPrettyString(ent)}");
-        AfterInsert(ent, args.Used, args.User);
+        _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(args.User):player} inserted {ToPrettyString(args.Used)} into {ToPrettyString(uid)}");
+        AfterInsert(uid, comp, args.Used, args.User);
         args.Handled = true;
     }
 
@@ -242,43 +234,41 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         ent.Comp.ContainerComponent.Container = Containers.EnsureContainer<Container>(ent, DisposalContainerComponent.ContainerId);
     }
 
-    private void OnPowerChange(Entity<DisposalUnitComponent> ent, ref PowerChangedEvent args)
+    private void OnPowerChange(EntityUid uid, DisposalUnitComponent comp, ref PowerChangedEvent args)
     {
-        var comp = ent.Comp;
-
         if (!comp.Running)
             return;
 
-        UpdateUI(ent);
-        UpdateVisualState(ent);
+        UpdateUI((uid, comp));
+        UpdateVisualState(uid, comp);
 
         if (!args.Powered)
         {
             comp.NextFlush = null;
-            Dirty(ent);
+            Dirty(uid, comp);
             return;
         }
 
         if (comp.Engaged)
         {
             // Run ManualEngage to recalculate a new flush time
-            ManualEngage(ent);
+            ManualEngage(uid, comp);
         }
     }
 
-    private void OnAnchorChanged(Entity<DisposalUnitComponent> ent, ref AnchorStateChangedEvent args)
+    private void OnAnchorChanged(EntityUid uid, DisposalUnitComponent comp, ref AnchorStateChangedEvent args)
     {
-        if (Terminating(ent))
+        if (Terminating(uid))
             return;
 
-        UpdateVisualState(ent);
+        UpdateVisualState(uid, comp);
         if (!args.Anchored)
-            TryEjectContents(ent);
+            TryEjectContents(uid, comp);
     }
 
-    private void OnDragDropOn(Entity<DisposalUnitComponent> ent, ref DragDropTargetEvent args)
+    private void OnDragDropOn(EntityUid uid, DisposalUnitComponent comp, ref DragDropTargetEvent args)
     {
-        args.Handled = TryInsert(ent, args.Dragged, args.User);
+        args.Handled = TryInsert(uid, args.Dragged, args.User);
     }
 
     protected virtual void UpdateUI(Entity<DisposalUnitComponent> entity)
@@ -289,29 +279,26 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
     /// <summary>
     /// Returns the estimated time when the disposal unit will be back to full pressure.
     /// </summary>
-    public TimeSpan EstimatedFullPressure(Entity<DisposalUnitComponent> ent)
+    public TimeSpan EstimatedFullPressure(EntityUid uid, DisposalUnitComponent comp)
     {
-        var comp = ent.Comp;
-
         if (comp.NextPressurized < GameTiming.CurTime)
             return TimeSpan.Zero;
 
         return comp.NextPressurized;
     }
 
-    public bool CanFlush(Entity<DisposalUnitComponent> ent)
+    public bool CanFlush(EntityUid uid, DisposalUnitComponent comp)
     {
-        return GetState(ent) == DisposalsPressureState.Ready
-               && _power.IsPowered(ent.Owner)
-               && Comp<TransformComponent>(ent).Anchored;
+        return GetState(uid, comp) == DisposalsPressureState.Ready
+               && _power.IsPowered(uid)
+               && Comp<TransformComponent>(uid).Anchored;
     }
 
-    public void Remove(Entity<DisposalUnitComponent> ent, EntityUid toRemove)
+    public void Remove(EntityUid uid, DisposalUnitComponent comp, EntityUid toRemove)
     {
         if (GameTiming.ApplyingState)
             return;
 
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
         if (!Containers.Remove(toRemove, containerComp.Container))
@@ -323,56 +310,55 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             if (!comp.Engaged)
             {
                 comp.NextFlush = null;
-                Dirty(ent);
-                UpdateUI(ent);
+                Dirty(uid, comp);
+                UpdateUI((uid, comp));
             }
         }
 
-        _climb.Climb(toRemove, toRemove, ent, silent: true);
+        _climb.Climb(toRemove, toRemove, uid, silent: true);
 
-        UpdateVisualState(ent);
+        UpdateVisualState(uid, comp);
     }
 
-    public void UpdateVisualState(Entity<DisposalUnitComponent> ent, bool flush = false)
+    public void UpdateVisualState(EntityUid uid, DisposalUnitComponent comp, bool flush = false)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
-        if (!TryComp(ent, out AppearanceComponent? appearance))
+        if (!TryComp(uid, out AppearanceComponent? appearance))
         {
             return;
         }
 
-        if (!Transform(ent).Anchored)
+        if (!Transform(uid).Anchored)
         {
-            _appearance.SetData(ent, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.UnAnchored, appearance);
-            _appearance.SetData(ent, DisposalUnitComponent.Visuals.Handle, DisposalUnitComponent.HandleState.Normal, appearance);
-            _appearance.SetData(ent, DisposalUnitComponent.Visuals.Light, DisposalUnitComponent.LightStates.Off, appearance);
+            _appearance.SetData(uid, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.UnAnchored, appearance);
+            _appearance.SetData(uid, DisposalUnitComponent.Visuals.Handle, DisposalUnitComponent.HandleState.Normal, appearance);
+            _appearance.SetData(uid, DisposalUnitComponent.Visuals.Light, DisposalUnitComponent.LightStates.Off, appearance);
             return;
         }
 
-        var state = GetState(ent);
+        var state = GetState(uid, comp);
 
         switch (state)
         {
             case DisposalsPressureState.Flushed:
-                _appearance.SetData(ent, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.OverlayFlushing, appearance);
+                _appearance.SetData(uid, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.OverlayFlushing, appearance);
                 break;
             case DisposalsPressureState.Pressurizing:
-                _appearance.SetData(ent, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.OverlayCharging, appearance);
+                _appearance.SetData(uid, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.OverlayCharging, appearance);
                 break;
             case DisposalsPressureState.Ready:
-                _appearance.SetData(ent, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.Anchored, appearance);
+                _appearance.SetData(uid, DisposalUnitComponent.Visuals.VisualState, DisposalUnitComponent.VisualState.Anchored, appearance);
                 break;
         }
 
-        _appearance.SetData(ent, DisposalUnitComponent.Visuals.Handle, comp.Engaged
+        _appearance.SetData(uid, DisposalUnitComponent.Visuals.Handle, comp.Engaged
             ? DisposalUnitComponent.HandleState.Engaged
             : DisposalUnitComponent.HandleState.Normal, appearance);
 
-        if (!_power.IsPowered(ent.Owner))
+        if (!_power.IsPowered(uid))
         {
-            _appearance.SetData(ent, DisposalUnitComponent.Visuals.Light, DisposalUnitComponent.LightStates.Off, appearance);
+            _appearance.SetData(uid, DisposalUnitComponent.Visuals.Light, DisposalUnitComponent.LightStates.Off, appearance);
             return;
         }
 
@@ -392,20 +378,19 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             lightState |= DisposalUnitComponent.LightStates.Ready;
         }
 
-        _appearance.SetData(ent, DisposalUnitComponent.Visuals.Light, lightState, appearance);
+        _appearance.SetData(uid, DisposalUnitComponent.Visuals.Light, lightState, appearance);
     }
 
     /// <summary>
     /// Gets the current pressure state of a disposals unit.
     /// </summary>
-    /// <param name="ent"></param>
+    /// <param name="uid"></param>
+    /// <param name="comp"></param>
     /// <param name="metadata"></param>
     /// <returns></returns>
-    public DisposalsPressureState GetState(Entity<DisposalUnitComponent> ent, MetaDataComponent? metadata = null)
+    public DisposalsPressureState GetState(EntityUid uid, DisposalUnitComponent comp, MetaDataComponent? metadata = null)
     {
-        var comp = ent.Comp;
-
-        var nextPressure = Metadata.GetPauseTime(ent, metadata) + comp.NextPressurized - GameTiming.CurTime;
+        var nextPressure = Metadata.GetPauseTime(uid, metadata) + comp.NextPressurized - GameTiming.CurTime;
         var pressurizeTime = 1f / PressurePerSecond;
         var pressurizeDuration = pressurizeTime - comp.FlushDelay.TotalSeconds;
 
@@ -422,19 +407,17 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         return DisposalsPressureState.Ready;
     }
 
-    public float GetPressure(Entity<DisposalUnitComponent> ent, MetaDataComponent? metadata = null)
+    public float GetPressure(EntityUid uid, DisposalUnitComponent comp, MetaDataComponent? metadata = null)
     {
-        if (!Resolve(ent, ref metadata))
+        if (!Resolve(uid, ref metadata))
             return 0f;
 
-        var comp = ent.Comp;
-
-        var pauseTime = Metadata.GetPauseTime(ent, metadata);
+        var pauseTime = Metadata.GetPauseTime(uid, metadata);
         return MathF.Min(1f,
             (float)(GameTiming.CurTime - pauseTime - comp.NextPressurized).TotalSeconds / PressurePerSecond);
     }
 
-    protected void OnPreventCollide(Entity<DisposalUnitComponent> ent,
+    protected void OnPreventCollide(EntityUid uid, DisposalUnitComponent comp,
         ref PreventCollideEvent args)
     {
         var otherBody = args.OtherEntity;
@@ -446,32 +429,30 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         }
     }
 
-    protected void OnCanDragDropOn(Entity<DisposalUnitComponent> ent, ref CanDropTargetEvent args)
+    protected void OnCanDragDropOn(EntityUid uid, DisposalUnitComponent comp, ref CanDropTargetEvent args)
     {
         if (args.Handled)
             return;
 
-        args.CanDrop = CanInsert(ent, args.Dragged);
+        args.CanDrop = CanInsert(uid, comp, args.Dragged);
         args.Handled = true;
     }
 
-    protected void OnEmagged(Entity<DisposalUnitComponent> ent, ref GotEmaggedEvent args)
+    protected void OnEmagged(EntityUid uid, DisposalUnitComponent comp, ref GotEmaggedEvent args)
     {
-        var comp = ent.Comp;
         comp.DisablePressure = true;
         args.Handled = true;
     }
 
-    public virtual bool CanInsert(Entity<DisposalUnitComponent> ent, EntityUid entity)
+    public virtual bool CanInsert(EntityUid uid, DisposalUnitComponent comp, EntityUid entity)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
         // TODO: All of the below should be using the EXISTING EVENT
         if (!Containers.CanInsert(entity, containerComp.Container))
             return false;
 
-        if (!Transform(ent).Anchored)
+        if (!Transform(uid).Anchored)
             return false;
 
         var storable = HasComp<ItemComponent>(entity);
@@ -488,13 +469,12 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             return false;
     }
 
-    public void DoInsertDisposalUnit(Entity<DisposalUnitComponent> ent,
+    public void DoInsertDisposalUnit(EntityUid uid,
         EntityUid toInsert,
         EntityUid user,
         DisposalUnitComponent? disposal = null)
     {
-
-        if (!Resolve(ent, ref disposal))
+        if (!Resolve(uid, ref disposal))
             return;
 
         var containerComp = disposal.ContainerComponent;
@@ -502,37 +482,37 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         if (!Containers.Insert(toInsert, containerComp.Container))
             return;
 
-        _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(user):player} inserted {ToPrettyString(toInsert)} into {ToPrettyString(ent)}");
-        AfterInsert(ent, toInsert, user);
+        _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(user):player} inserted {ToPrettyString(toInsert)} into {ToPrettyString(uid)}");
+        AfterInsert(uid, disposal, toInsert, user);
     }
 
-    public virtual void AfterInsert(Entity<DisposalUnitComponent> ent,
+    public virtual void AfterInsert(EntityUid uid,
+        DisposalUnitComponent comp,
         EntityUid inserted,
         EntityUid? user = null,
         bool doInsert = false)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
-        Audio.PlayPredicted(comp.InsertSound, ent, user: user);
+        Audio.PlayPredicted(comp.InsertSound, uid, user: user);
         if (doInsert && !Containers.Insert(inserted, containerComp.Container))
             return;
 
         if (user != inserted && user != null)
-            _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(user.Value):player} inserted {ToPrettyString(inserted)} into {ToPrettyString(ent)}");
+            _adminLog.Add(LogType.Action, LogImpact.Medium, $"{ToPrettyString(user.Value):player} inserted {ToPrettyString(inserted)} into {ToPrettyString(uid)}");
 
-        QueueAutomaticEngage(ent);
+        QueueAutomaticEngage(uid, comp);
 
-        _ui.CloseUi(ent.Owner, DisposalUnitComponent.DisposalUnitUiKey.Key, inserted);
+        _ui.CloseUi(uid, DisposalUnitComponent.DisposalUnitUiKey.Key, inserted);
 
         // Maybe do pullable instead? Eh still fine.
         Joints.RecursiveClearJoints(inserted);
-        UpdateVisualState(ent);
+        UpdateVisualState(uid, comp);
     }
 
-    public bool TryInsert(Entity<DisposalUnitComponent> ent, EntityUid toInsertId, EntityUid? userId, DisposalUnitComponent? unit = null)
+    public bool TryInsert(EntityUid uid, EntityUid toInsertId, EntityUid? userId, DisposalUnitComponent? unit = null)
     {
-        if (!Resolve(ent, ref unit))
+        if (!Resolve(uid, ref unit))
             return false;
 
         if (userId.HasValue && !HasComp<HandsComponent>(userId) && toInsertId != userId) // Mobs like mouse can Jump inside even with no hands
@@ -541,7 +521,7 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             return false;
         }
 
-        if (!CanInsert(ent, toInsertId))
+        if (!CanInsert(uid, unit, toInsertId))
             return false;
 
         var insertingSelf = userId == toInsertId;
@@ -553,13 +533,13 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
 
         if (delay <= 0 || userId == null)
         {
-            AfterInsert(ent, toInsertId, userId, doInsert: true);
+            AfterInsert(uid, unit, toInsertId, userId, doInsert: true);
             return true;
         }
 
         // Can't check if our target AND disposals moves currently so we'll just check target.
         // if you really want to check if disposals moves then add a predicate.
-        var doAfterArgs = new DoAfterArgs(EntityManager, userId.Value, delay, new DisposalDoAfterEvent(), ent, target: toInsertId, used: ent)
+        var doAfterArgs = new DoAfterArgs(EntityManager, userId.Value, delay, new DisposalDoAfterEvent(), uid, target: toInsertId, used: uid)
         {
             BreakOnDamage = true,
             BreakOnMove = true,
@@ -570,17 +550,16 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         return true;
     }
 
-    private void UpdateState(Entity<DisposalUnitComponent> ent, DisposalsPressureState state, MetaDataComponent metadata)
+    private void UpdateState(EntityUid uid, DisposalUnitComponent comp, DisposalsPressureState state, MetaDataComponent metadata)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
         if (comp.State == state)
             return;
 
         comp.State = state;
-        UpdateVisualState(ent);
-        Dirty(ent, metadata);
+        UpdateVisualState(uid, comp);
+        Dirty(uid, comp, metadata);
 
         if (state == DisposalsPressureState.Ready)
         {
@@ -605,15 +584,14 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
     /// <summary>
     /// Work out if we can stop updating this disposals component i.e. full pressure and nothing colliding.
     /// </summary>
-    private void Update(Entity<DisposalUnitComponent> ent, MetaDataComponent metadata)
+    private void Update(EntityUid uid, DisposalUnitComponent comp, MetaDataComponent metadata)
     {
-        var state = GetState(ent, metadata);
-        var comp = ent.Comp;
+        var state = GetState(uid, comp, metadata);
 
         // Pressurizing, just check if we need a state update.
         if (comp.NextPressurized > GameTiming.CurTime)
         {
-            UpdateState(ent, state, metadata);
+            UpdateState(uid, comp, state, metadata);
             return;
         }
 
@@ -621,36 +599,33 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         {
             if (comp.NextFlush.Value < GameTiming.CurTime)
             {
-                TryFlush(ent);
+                TryFlush(uid, comp);
             }
         }
 
-        UpdateState(ent, state, metadata);
+        UpdateState(uid, comp, state, metadata);
     }
 
-    public bool TryFlush(Entity<DisposalUnitComponent> ent)
+    public bool TryFlush(EntityUid uid, DisposalUnitComponent comp)
     {
-        if (!CanFlush(ent))
+        if (!CanFlush(uid, comp))
         {
             return false;
         }
-
-        var uid = ent.Owner;
-        var comp = ent.Comp;
 
         if (comp.NextFlush != null)
             comp.NextFlush = comp.NextFlush.Value + comp.AutomaticEngageTime;
 
         var beforeFlushArgs = new BeforeDisposalFlushEvent();
-        RaiseLocalEvent(ent, beforeFlushArgs);
+        RaiseLocalEvent(uid, beforeFlushArgs);
 
         if (beforeFlushArgs.Cancelled)
         {
-            Disengage(ent);
+            Disengage(uid, comp);
             return false;
         }
 
-        var xform = Transform(ent);
+        var xform = Transform(uid);
         if (!TryComp(xform.GridUid, out MapGridComponent? grid))
             return false;
 
@@ -661,8 +636,8 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         if (entry == default || comp is not DisposalUnitComponent sDisposals)
         {
             comp.Engaged = false;
-            UpdateUI(ent);
-            Dirty(ent);
+            UpdateUI((uid, comp));
+            Dirty(uid, comp);
             return false;
         }
 
@@ -678,9 +653,9 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         // stop queuing NOW
         comp.NextFlush = null;
 
-        UpdateVisualState(ent, true);
-        Dirty(ent);
-        UpdateUI(ent);
+        UpdateVisualState(uid, comp, true);
+        Dirty(uid, comp);
+        UpdateUI((uid, comp));
 
         return true;
     }
@@ -690,29 +665,26 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
 
     }
 
-    public void ManualEngage(Entity<DisposalUnitComponent> ent, MetaDataComponent? metadata = null)
+    public void ManualEngage(EntityUid uid, DisposalUnitComponent comp, MetaDataComponent? metadata = null)
     {
-        var comp = ent.Comp;
-
         comp.Engaged = true;
-        UpdateVisualState(ent);
-        Dirty(ent);
-        UpdateUI(ent);
+        UpdateVisualState(uid, comp);
+        Dirty(uid, comp);
+        UpdateUI((uid, comp));
 
-        if (!CanFlush(ent))
+        if (!CanFlush(uid, comp))
             return;
 
-        if (!Resolve(ent, ref metadata))
+        if (!Resolve(uid, ref metadata))
             return;
 
-        var pauseTime = Metadata.GetPauseTime(ent, metadata);
+        var pauseTime = Metadata.GetPauseTime(uid, metadata);
         var nextEngage = GameTiming.CurTime - pauseTime + comp.ManualFlushTime;
         comp.NextFlush = TimeSpan.FromSeconds(Math.Min((comp.NextFlush ?? TimeSpan.MaxValue).TotalSeconds, nextEngage.TotalSeconds));
     }
 
-    public void Disengage(Entity<DisposalUnitComponent> ent)
+    public void Disengage(EntityUid uid, DisposalUnitComponent comp)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
         comp.Engaged = false;
@@ -722,58 +694,54 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             comp.NextFlush = null;
         }
 
-        UpdateVisualState(ent);
-        Dirty(ent);
-        UpdateUI(ent);
+        UpdateVisualState(uid, comp);
+        Dirty(uid, comp);
+        UpdateUI((uid, comp));
     }
 
     /// <summary>
     /// Remove all entities currently in the disposal unit.
     /// </summary>
-    public void TryEjectContents(Entity<DisposalUnitComponent> ent)
+    public void TryEjectContents(EntityUid uid, DisposalUnitComponent comp)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
         foreach (var entity in containerComp.Container.ContainedEntities.ToArray())
         {
-            Remove(ent, entity);
+            Remove(uid, comp, entity);
         }
 
         if (!comp.Engaged)
         {
             comp.NextFlush = null;
-            Dirty(ent);
-            UpdateUI(ent);
+            Dirty(uid, comp);
+            UpdateUI((uid, comp));
         }
     }
 
     /// <summary>
     /// If something is inserted (or the likes) then we'll queue up an automatic flush in the future.
     /// </summary>
-    public void QueueAutomaticEngage(Entity<DisposalUnitComponent> ent, MetaDataComponent? metadata = null)
+    public void QueueAutomaticEngage(EntityUid uid, DisposalUnitComponent comp, MetaDataComponent? metadata = null)
     {
-        var comp = ent.Comp;
         var containerComp = comp.ContainerComponent;
 
-        if (comp.Deleted || !comp.AutomaticEngage || !_power.IsPowered(ent.Owner) && containerComp.Container.ContainedEntities.Count == 0)
+        if (comp.Deleted || !comp.AutomaticEngage || !_power.IsPowered(uid) && containerComp.Container.ContainedEntities.Count == 0)
         {
             return;
         }
 
-        var pauseTime = Metadata.GetPauseTime(ent, metadata);
+        var pauseTime = Metadata.GetPauseTime(uid, metadata);
         var automaticTime = GameTiming.CurTime + comp.AutomaticEngageTime - pauseTime;
         var flushTime = TimeSpan.FromSeconds(Math.Min((comp.NextFlush ?? TimeSpan.MaxValue).TotalSeconds, automaticTime.TotalSeconds));
 
         comp.NextFlush = flushTime;
-        Dirty(ent);
-        UpdateUI(ent);
+        Dirty(uid, comp);
+        UpdateUI((uid, comp));
     }
 
     private void OnUiButtonPressed(EntityUid uid, DisposalUnitComponent comp, DisposalUnitComponent.UiButtonPressedMessage args)
     {
-        var ent = new Entity<DisposalUnitComponent>(uid, comp);
-
         if (args.Actor is not { Valid: true } player)
         {
             return;
@@ -782,34 +750,32 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
         switch (args.Button)
         {
             case DisposalUnitComponent.UiButton.Eject:
-                TryEjectContents(ent);
-                _adminLog.Add(LogType.Action, LogImpact.Low, $"{ToPrettyString(player):player} hit eject button on {ToPrettyString(ent)}");
+                TryEjectContents(uid, comp);
+                _adminLog.Add(LogType.Action, LogImpact.Low, $"{ToPrettyString(player):player} hit eject button on {ToPrettyString(uid)}");
                 break;
             case DisposalUnitComponent.UiButton.Engage:
-                ToggleEngage(ent);
-                _adminLog.Add(LogType.Action, LogImpact.Low, $"{ToPrettyString(player):player} hit flush button on {ToPrettyString(ent)}, it's now {(comp.Engaged ? "on" : "off")}");
+                ToggleEngage(uid, comp);
+                _adminLog.Add(LogType.Action, LogImpact.Low, $"{ToPrettyString(player):player} hit flush button on {ToPrettyString(uid)}, it's now {(comp.Engaged ? "on" : "off")}");
                 break;
             case DisposalUnitComponent.UiButton.Power:
-                _power.TogglePower(ent, user: args.Actor);
+                _power.TogglePower(uid, user: args.Actor);
                 break;
             default:
-                throw new ArgumentOutOfRangeException($"{ToPrettyString(player):player} attempted to hit a nonexistant button on {ToPrettyString(ent)}");
+                throw new ArgumentOutOfRangeException($"{ToPrettyString(player):player} attempted to hit a nonexistant button on {ToPrettyString(uid)}");
         }
     }
 
-    public void ToggleEngage(Entity<DisposalUnitComponent> ent)
+    public void ToggleEngage(EntityUid uid, DisposalUnitComponent comp)
     {
-        var comp = ent.Comp;
-
         comp.Engaged ^= true;
 
         if (comp.Engaged)
         {
-            ManualEngage(ent);
+            ManualEngage(uid, comp);
         }
         else
         {
-            Disengage(ent);
+            Disengage(uid, comp);
         }
     }
 
@@ -828,7 +794,7 @@ public abstract class SharedDisposalUnitSystem : EntitySystem
             return;
         }
 
-        if (!CanInsert(ent, args.User))
+        if (!CanInsert(uid, comp, args.User))
             return;
 
         // Add verb to climb inside of the unit,
